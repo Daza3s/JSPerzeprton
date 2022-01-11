@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2 Schichten Perzeptron</title>
+</head>
+<body>
+    <script>
+       class Matrix {
+    /**
+     * 
+     * @param {int} heigth 
+     * @param {int} width 
+     */
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.length = height*width;
+        this.werte = new Array(height*width);
+    }
+    /**
+     * Randomizes all values in range from 0 to 1
+     */
+    randomize() {
+        for(let i = 0;i < this.length;i++) {
+            this.werte[i] = Math.random()*2-1;
+        }
+    }
+
+    init() {
+        for(let i = 0;i < this.length;i++) {
+            this.werte[i] = 0;
+        }
+    }
+
+    /**
+     * 
+     * @param {int} x 
+     * @param {int} y 
+     * @returns {int} Wert
+     */
+    at(x, y) {
+        return this.werte[x+y*this.width];
+    }
+
+    /**
+     * 
+     * @param {int} x 
+     * @param {int} y 
+     * @param {double} wert
+     */
+     set(x, y, wert) {
+        this.werte[x+y*this.width] = wert;
+    }
+
+    /**
+    *dreht Matrix um 90°
+    */
+    dreh() {
+        let erg = new Matrix(this.height, this.width);
+        for(let y = 0;y < this.height;y++) {
+            for(let x = 0;x < this.width;x++) {
+                erg.set(this.height-1-y,x, this.at(x,y));
+            }
+        }
+        return erg;
+    }
+
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Punktprodukt 
+     */
+    dot(m) {
+        if(m.heigth !== this.heigth || m.width !== this.width) {
+            throw "Invalid multiplication scale";
+        }
+        let erg = new Matrix(this.width,this.height);
+        for(let i = 0;i < this.length;i++) {
+            erg.werte[i] = this.werte[i] * m.werte[i];
+        }
+
+        return erg;
+    }
+
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Summe
+     */
+    add(m) {
+        if(m.heigth !== this.heigth || m.width !== this.width) {
+            throw "Invalid addition scale";
+        }
+        let erg = new Matrix(this.width,this.height);
+        for(let i = 0;i < this.length;i++) {
+            erg.werte[i] = this.werte[i] + m.werte[i];
+        }
+
+        return erg;
+    }
+
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Differenz
+     */
+    sub(m) {
+        if(m.heigth !== this.heigth || m.width !== this.width) {
+            throw "Invalid subtraction scale";
+        }
+        let erg = new Matrix(this.width,this.height);
+        for(let i = 0;i < this.length;i++) {
+            erg.werte[i] = this.werte[i] - m.werte[i];
+        }
+
+        return erg;
+    }
+    
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Produkt
+     */
+    mult(m) {
+        if(typeof m === "number") {
+            let erg = new Matrix(this.width,this.height);
+            for(let i = 0;i < this.length;i++) {
+                erg.werte[i] = this.werte[i] * m;
+            }
+            return erg;
+        }else if(this.width !== m.height) {
+            throw "Invalid multiplication scale";
+        }
+        
+        let erg = new Matrix(m.width,this.height);
+        for(let y = 0;y < this.height;y++) {
+            for(let x = 0;x < m.width;x++) {
+                erg.set(x,y,0);
+                for(let i = 0;i < this.width;i++) {
+                    erg.set(x,y,erg.at(x,y) + this.at(i,y) * m.at(x,i));
+                }
+            }
+        }
+
+        return erg;
+    }
+
+    /**
+     * 
+     * @returns Nested array
+     */
+    nest() {
+        let erg = [];
+        for(let y = 0;y < this.height;y++) {
+            erg.push([]);
+            for(let x = 0;x < this.width;x++) {
+                erg[y].push(this.at(x,y));
+            }
+        }
+        return erg;
+    }
+
+}
+ 
+    </script>
+
+    <canvas style="width: 500px; height: 500px; bottom: 50px; position: absolute; border: 2px solid black; background-color: white" id="canvas"></canvas>
+    <button onclick="next()" id="nb">next</button>
+    <a id="error">Error</a>
+
+    <a id="epoche">Epoche</a>
+
+    <canvas style="width: 1000px; height: 500px; bottom: 50px; left:600px; position: absolute; border: 2px solid black; background-color: white" id="vis"></canvas>
+    <script>
+
+        let canvasId = "canvas";
+        let canvas = document.getElementById(canvasId);
+        let ctx = canvas.getContext("2d");
+
+
+        let targets = [];
+
+        function clear() {
+            canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+        }
+        function renderTargets() {
+            const canvas = document.getElementById('canvas');
+            //canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+            //canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+            const ctx = canvas.getContext("2d");
+
+            let sclF = 255/500;
+
+            for(i = 0;i < targets.length;i++) {
+                let x = targets[i][0];
+                let y = targets[i][1]
+                ctx.beginPath();
+                /*if(targets[i][2]-0.5 >= 0) {
+                    let farbe = parseInt(targets[i][2]*255).toString(16);
+                    ctx.strokeStyle = "#"+parseInt(targets[i][2]*sclF).toString(16)+"0000";
+                }else {
+                    let farbe = parseInt(targets[i][2]*sclF).toString(16);
+                    ctx.strokeStyle = "#0000"+parseInt(targets[i][2]*255).toString(16);
+                }*/
+                ctx.strokeStyle = targets[i][2] > 0 ? "#FF6666" : "#6666FF";
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.stroke();
+            }
+        }
+
+        let Perzeptron2x1 = function(hidden) {
+            this.hidden = hidden;
+            this.sättigung = 0.01;
+            this.theta = 1;
+            this.lernRate = 0.5;
+
+            this.weights1 = new Matrix(hidden,2);
+            this.weights2 = new Matrix(1,hidden);
+            this.weights1.randomize();
+            this.weights2.randomize();
+
+            this.bias1 = new Matrix(hidden, 1);
+            this.bias2 = new Matrix(1,1);
+            this.bias1.randomize();
+            this.bias2.randomize();
+
+            this.bias1.mult(0);
+            this.bias2.mult(0);
+
+            this.renderTarget = canvasId;
+            this.evaluate = function(x,y) {
+                let testMatrix = new Matrix(2,1);
+                testMatrix.werte[0] = x;
+                testMatrix.werte[1] = y;
+                
+                testMatrix = testMatrix.mult(this.weights1);
+                testMatrix = testMatrix.add(this.bias1);
+                testMatrix = this.act(testMatrix);
+                
+                testMatrix = testMatrix.mult(this.weights2);
+                testMatrix = testMatrix.add(this.bias2);
+                testMatrix = this.act(testMatrix);
+                return testMatrix.werte[0];
+            }
+
+            this.sigmoid = function(n) {
+                return 1 / (1 + Math.exp(-n));
+            }
+
+            this.act = function(m) {
+                let erg = new Matrix(m.width, m.height);
+                erg.werte = m.werte.map( x => this.sigmoid(x));
+                return erg;
+            }
+
+            this.actA = function(m) {
+                let erg = new Matrix(m.width, m.height);
+                erg.werte = m.werte.map( x => this.sigmoid(x) * (1-this.sigmoid(x)) + this.sättigung);
+                return erg;
+            }
+
+            /**
+             * @param {Matrix} input
+             * @param {Matrix} target 
+             * @returns error
+             */
+            this.train = function(input, target) {
+                let netj = input.mult(this.weights1).add(this.bias1);
+                let outj = this.act(netj);
+                let netk = outj.mult(this.weights2).add(this.bias2);
+                let outk = this.act(netk);
+
+                /* Fehlerberechnung*/
+                let Etotal = 0;
+
+                for(let i = 0;i < outk.werte.length;i++) {
+                    let wert = outk.werte[i];
+                    let ziel = target.werte[i];
+                    Etotal += (ziel - wert)*(ziel - wert);
+                }
+
+                Etotal = Etotal / 2;
+
+                let deltak = outk.sub(target).dot(this.actA(netk));
+                let deltaW2 = outj.dreh().mult( deltak ).mult(this.lernRate);
+
+                let deltaj = this.actA(netj).dot( deltak.mult( this.weights2.dreh()) ); //?????
+                let deltaW1 = input.dreh().mult( deltaj ).mult(this.lernRate);
+
+                
+                this.weights2 = this.weights2.sub(deltaW2);
+                this.weights1 = this.weights1.sub(deltaW1);
+
+                this.bias2 = this.bias2.sub(deltak.mult(this.lernRate));
+                this.bias1 = this.bias1.sub(deltaj.mult(this.lernRate));
+
+                return Etotal;
+            }
+
+            /**
+             * @param {Object} InputArray
+             * @param {Object} OutputArray
+             * @param {Number} MaxRunden
+             * @param {Number} MinError
+             * @param {Number} RenderFrequenzy 0 or false for no render
+             * @returns Error  
+            */
+            this.trainSet = function(inputArray, targetArray, maxRunden = 1000, minError = 0.01, render = 0) {
+                let oldB1 = this.bias1;
+                let oldB2 = this.bias2;
+                let oldW1 = this.weights1;
+                let oldW2 = this.weights2;
+
+                let runde = 0;
+                let error = 0;
+                while(runde < maxRunden) {
+                    runde++;
+                    for(let i = 0;i < inputArray.length;i++) {
+                        let inMatrix = new Matrix(inputArray[i].length, 1);
+                        inMatrix.werte = inputArray[i];
+                        let outMatrix = new Matrix(targetArray[i].length, 1);
+                        outMatrix.werte = targetArray[i];
+                        let localError = this.train(inMatrix, outMatrix);
+                        if(typeof localError != "number" || localError == "Infinity") {
+                            console.error(typeof localError);
+                        }else {
+                            error += localError;
+                        }
+                    }
+                    
+                    if(render != false) {
+                        if(runde % render == 0) {
+                            this.render();
+                        }
+                    }
+
+                    if(error <= minError) {
+                        return error;
+                    } 
+                }
+                /*console.log("Bias 1 Diff");
+                console.dir(this.bias1.sub(oldB1).werte);
+                console.log("Weights 1 Diff");
+                console.dir(this.weights1.sub(oldW1).werte);
+                console.log("Bias 2 Diff");
+                console.dir(this.bias2.sub(oldB2).werte);
+                console.log("Weights 2 Diff");
+                console.dir(this.weights2.sub(oldW2).werte);*/
+                return error;
+                
+            }
+        }
+
+                
+
+
+        Perzeptron2x1.prototype.render = function() {
+            let canvas = document.getElementById(this.renderTarget);
+        
+            canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+            canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+
+            let ctx = canvas.getContext("2d");
+
+
+            for(let x = 0;x < canvas.width;x += 2) {
+                for(let y = 0;y < canvas.height;y += 2) {
+                    let g = 0;
+                    let erg = this.evaluate((x/500)-0.5,(y/500)-0.5);
+                    
+                    let r = erg > 0 ? Math.min(erg*100,255) : 0;
+                    let b = erg <= 0 ? Math.min(erg*100, 255) : 0;
+                    
+                    /*let r = erg > 0 ? 100 : 0;
+                    let b = erg <= 0 ? 100 : 0;*/
+
+                    let a = 255;
+                    ctx.fillStyle = "rgba("+r+","+g+","+b+","+(a/255)+")";
+                    ctx.fillRect(x,y,2,2);
+                }
+            }
+
+            renderTargets();
+            
+        }
+
+        /**
+         * @param {Perzeptron2x1} network 
+        */
+        function vis(network) {
+            let vis = document.getElementById("vis");
+
+            let width = window.getComputedStyle(vis, null).getPropertyValue("width");
+            let height = window.getComputedStyle(vis, null).getPropertyValue("height")
+
+            vis.setAttribute('width', width);
+            vis.setAttribute('height', height);
+
+            let ctx = vis.getContext("2d");
+            let inputCount = 2;
+            let hiddenCount = network.hidden; 
+            let outputCount = 1;
+
+            let maxCount = Math.max(inputCount,hiddenCount,outputCount)
+
+            let hMargin = 20;
+            let lMargin = 50;
+
+            let rNeuron = (500-hMargin*2) / (maxCount+hMargin);
+
+            let inC = [];
+            let hiddenC = [];
+            let outC = [];
+
+            let w1 = network.weights1;
+            let bw1 = network.bias1;
+            let w2 = network.weights2;
+            let bw2 = network.bias2;
+
+
+            let maxWidth = 5;
+            let minWidth = 0.1;
+            let maxWeight = Math.max(...w1.werte,...w2.werte);
+            let minWeight = Math.min(...w1.werte,...w2.werte);
+
+            let maxBias = Math.max(...bw1.werte,...bw2.werte);
+            let minBias = Math.min(...bw1.werte,...bw2.werte);
+
+            for(let i = 0;i < inputCount;i++) {
+                inC.push([lMargin + rNeuron, hMargin+rNeuron*(3 * i + 1)])
+            }
+
+            for(let i = 0;i < hiddenCount;i++) {
+                hiddenC.push([lMargin * 3 + rNeuron*3, hMargin+rNeuron*(3 * i + 1)]);
+            }
+
+            for(let i = 0;i < outputCount;i++) {
+                outC.push([lMargin * 6 + rNeuron*3,hMargin+rNeuron*(3 * i + 1)]);
+            }
+            
+            inC[1][1] = hiddenC[hiddenC.length-1][1];
+            /*
+            transform it to [0,1] from [a,b] and then transform it to [c,d]. 
+            x in [a,b] => y = (x-a)/(b-a) in [0,1]
+            y in [0,1] => z = (d-c)*y + c in [c,d]
+            =>
+            x in [a,b] => 
+            y = (x-minWeight)/(maxWeight-minWeight)
+            y in [0,1] => 
+            z = (maxWidth-minWidth) * y + minWidth
+            */
+
+            for(let start = 0;start < inC.length;start++) {
+                for(let end = 0;end < hiddenC.length;end++) {
+                    let x = w1.at(end,start);
+                    let y = (x - minWeight)/(maxWeight-minWeight);
+                    ctx.lineWidth = (maxWidth-minWidth) * y + minWidth;
+
+                    ctx.beginPath();
+                    ctx.moveTo(inC[start][0],inC[start][1]);
+                    ctx.lineTo(hiddenC[end][0],hiddenC[end][1])
+                    ctx.stroke();
+                }
+            }
+
+            for(let start = 0;start < hiddenC.length;start++) {
+                for(let end = 0;end < outC.length;end++) {
+                    let x = w2.at(end,start);
+                    let y = (x - minWeight)/(maxWeight-minWeight);
+                    ctx.lineWidth = (maxWidth-minWidth) * y + minWidth;
+
+                    ctx.beginPath();
+                    ctx.moveTo(hiddenC[start][0],hiddenC[start][1]);
+                    ctx.lineTo(outC[end][0],outC[end][1])
+                    ctx.stroke();
+                }
+            }
+
+            ctx.lineWidth = 2;
+
+            /*
+            transform it to [0,1] from [a,b] and then transform it to [c,d]. 
+            x in [a,b] => y = (x-a)/(b-a) in [0,1]
+            y in [0,1] => z = (d-c)*y + c in [c,d]
+            =>
+            x in [a,b] => 
+            y = (x-minBias)/(maxBias-minBias)
+            y in [0,1] => 
+            z = (255 - (-255) ) * y + (-255)
+            z = 510 * y - 255
+            */
+            ctx.strokeStyle = "#000000";
+
+            ctx.font = "6px";
+            ctx.textAlign = "center";
+
+            for(let i = 0;i < inputCount;i++) {
+                ctx.beginPath();
+                ctx.arc(inC[i][0], inC[i][1], rNeuron, 0, 2 * Math.PI);
+                ctx.fillStyle = "#888888";
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            for(let i = 0;i < hiddenCount;i++) {
+
+                if(bw1.werte[i] < 0) {
+                    let x = -bw1.werte[i];
+                    let y = (x - minBias)/(maxBias-minBias);
+                    let z = 255*y;
+                    ctx.fillStyle = "rgba(0,0,"+z.toString()+",1)";
+                }else {
+                    let x = bw1.werte[i];
+                    let y = (x - minBias)/(maxBias-minBias);
+                    let z = 255*y;
+                    ctx.fillStyle = "rgba("+z.toString()+",0,0,1)";
+                }
+
+                ctx.beginPath();
+                ctx.arc(hiddenC[i][0], hiddenC[i][1], rNeuron, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = "yellow";
+                ctx.fillText(bw1.werte[i].toFixed(2), hiddenC[i][0], hiddenC[i][1]);
+            }
+
+            for(let i = 0;i < outputCount;i++) {
+                if(bw2.werte[i] < 0) {
+                    let x = -bw2.werte[i];
+                    let y = (x - minBias)/(maxBias-minBias);
+                    let z = 255*y;
+                    ctx.fillStyle = "rgba(0,0,"+z.toString()+",1)";
+                }else {
+                    let x = bw2.werte[i];
+                    let y = (x - minBias)/(maxBias-minBias);
+                    let z = 255*y;
+                    ctx.fillStyle = "rgba("+z.toString()+",0,0,1)";
+                }
+
+                ctx.beginPath();
+                ctx.arc(outC[i][0], outC[i][1], rNeuron, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = "yellow";
+                ctx.fillText(bw2.werte[i].toFixed(2), outC[i][0], outC[i][1]);
+            }
+
+            
+        }
+
+        var inps = [];
+
+        let outs = [];
+
+        for(let i = 0;i < 20;i++) {
+            let x = Math.random()-0.5;
+            let y = Math.random()-0.5;
+            let erg = Math.random()-0.5;
+            inps.push([x,y]);
+            outs.push([erg]);
+            targets.push([(x+0.5)*500,(y+0.5)*500,erg]);
+        }
+
+        let test = new Perzeptron2x1(10);
+
+        test.render();
+
+        vis(test);
+
+        console.dir(test);
+
+        let toggle = false;
+        let int;
+
+        let epoch = 0;
+
+        function next() {
+            let errDisplay = document.getElementById("error");
+            let epoche = document.getElementById("epoche");
+            let btn = document.getElementById("nb");
+            if(!toggle) {
+                int = setInterval(()=>{
+                    let err = test.trainSet(inps, outs);
+                    test.render();
+                    vis(test);
+                    errDisplay.innerHTML = "Error: "+err;
+                    epoche.innerHTML = "Epoche: "+ (++epoch);
+                }, 2);
+                nb.innerHTML = "...";
+                toggle = !toggle;
+            }else {
+                clearInterval(int);
+                nb.innerHTML = "next";
+                toggle = !toggle;
+            }
+            
+        }
+
+    </script>
+</body>
+</html>

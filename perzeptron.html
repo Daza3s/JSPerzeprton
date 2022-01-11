@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perzeptron</title>
+</head>
+<body>
+    <canvas style="width: 500px; height: 500px; bottom: 50px; position: absolute; border: 2px solid black; background-color: white" id="canvas"></canvas>
+    <input id="target"></input>
+    <button onclick="add(true)">+</button>
+    <button onclick="add(false)">-</button>
+    <button onclick="generiereDaten()">Zufällig</button>
+    <button onclick="trainieren()" id="t">trainieren</button>
+    <a id="iteration">Iteration: 0</a>
+
+
+    <script>
+        const dataC = 30;
+        
+        var iterationen = 0;
+
+        var targets = [
+            [100, 100, false],
+            [200, 300, true],
+            [300, 400, false],
+            [150, 20, true],
+            [100, 100, false],
+            [400, 10, true],
+            [300, 200, true],
+            [450, 300, false],
+            [70, 250, false]
+        ];
+
+        function renderTargets() {
+            const canvas = document.getElementById('canvas');
+            canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+            canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+
+            const ctx = canvas.getContext("2d");
+
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+
+            for(i = 0;i < targets.length;i++) {
+                let x = targets[i][0];
+                let y = targets[i][1]
+                ctx.beginPath();
+                ctx.strokeStyle = targets[i][2] ? "#FF0000" : "#0000FF";
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+        }
+
+        function generiereDaten() {
+            let scramble = Math.random() < 0.1;
+            targets = [];
+            let a = Math.random();
+            let b = Math.random();
+            for(let i = 0;i < dataC; i++) {
+                let x = Math.random();
+                let y = Math.random();
+                let erg = a*x + b - y;
+                if(erg == 0) {
+                    continue;
+                }else if(erg > 0) {
+                    targets.push([x*500,y*500,scramble]);
+                }else {
+                    targets.push([x*500,y*500,!scramble]);
+                }
+            }
+            renderTargets();
+            iterationen = 0;
+            document.getElementById("iteration").innerHTML = "Iterationen: "+iterationen;
+        }
+
+        function add(dec) {
+            let input = document.getElementById("target");
+            let value = [input.value.split(" ")[0],input.value.split(" ")[1]];
+            targets.push([...value, dec])
+            
+            renderTargets();
+            iterationen = 0;
+            document.getElementById("iteration").innerHTML = "Iterationen: "+iterationen;
+        }
+
+        var Perzepton21 = function() {
+            this.w1j = Math.random();
+            this.w2j = Math.random();
+            this.theta = 1;
+            this.rate = 0.5;
+        }
+
+        let timer;
+
+        Perzepton21.prototype.render = function(id) {
+            renderTargets();
+            let canvas = document.getElementById(id);
+            let ctx = canvas.getContext("2d");
+            
+            let x_ = this.theta/this.w1j;
+            let y_ = this.theta/this.w2j;
+
+            let x1 = x_;
+            let y1 = 0;
+
+            let x2 = x_-(x_/y_);
+            let y2 = 1;
+
+            let x3 = 0;
+            let y3 = y_;
+
+            let x4 = 1;
+            let y4 = y_-(y_/x_);
+
+            let punkte = [];
+
+            if(x1 >= 0 && x1 <= 1 && y1 >= 0 && y1 <= 1) punkte.push([x1,y1]);
+
+            if(x2 >= 0 && x2 <= 1 && y2 >= 0 && y2 <= 1) punkte.push([x2,y2]);
+
+            if(x3 >= 0 && x3 <= 1 && y3 >= 0 && y3 <= 1) punkte.push([x3,y3]);
+
+            if(x4 >= 0 && x4 <= 1 && y4 >= 0 && y4 <= 1) punkte.push([x4,y4]);
+            
+            if(punkte.length != 2) return;
+
+            ctx.beginPath();
+            ctx.moveTo(canvas.width*punkte[0][0], canvas.height*punkte[0][1]);
+            ctx.lineTo(canvas.width*punkte[1][0],canvas.height*punkte[1][1]);
+            ctx.strokeStyle = "#000000";
+            ctx.stroke();
+        }
+
+        var test = new Perzepton21();
+        test.render("canvas");
+
+        var toggle = false;
+        function trainieren() {
+            function schritt() {
+                /*
+                    Teile Target durch 500 um koordinaten auf wert von o bis 1 zu projizieren
+                */
+                let verändert = false;
+
+                for(i = 0;i < targets.length;i++) {
+                    let zwischen = test.w1j * targets[i][0]/500 + test.w2j * targets[i][1]/500;
+                    let ausgabe = zwischen >= test.theta; 
+                    if(ausgabe && !targets[i][2]) { 
+                        //Ausgabe ist 1 und soll aber 0 sein
+                        test.w1j = test.w1j - targets[i][0]/500; 
+                        test.w2j = test.w2j - targets[i][1]/500;
+                        test.render("canvas");
+                        verändert = true;
+                    }else if(!ausgabe && targets[i][2]) { 
+                        //Ausgabe ist 0 und soll aber 1 sein
+                        test.w1j = test.w1j + targets[i][0]/500; 
+                        test.w2j = test.w2j + targets[i][1]/500;
+                        verändert = true;
+                        test.render("canvas");
+                    }
+                }
+                
+                if(!verändert) {
+                    test.render("canvas");
+                    clearInterval(timer);
+                    document.getElementById("t").innerHTML = "trainiere";
+                    toggle = !toggle;
+                }
+                iterationen++;
+                document.getElementById("iteration").innerHTML = "Iterationen: "+iterationen;
+            }
+
+            if(!toggle) {
+                timer = setInterval(schritt, 10);
+                document.getElementById("t").innerHTML = "training...";
+            }else {
+                clearInterval(timer);
+                document.getElementById("t").innerHTML = "trainiere";
+            }
+            toggle = !toggle;
+        }        
+
+
+    </script>
+</body>
+</html>
