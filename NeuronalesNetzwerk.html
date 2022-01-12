@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        class Matrix {
+    /**
+     * 
+     * @param {int} heigth 
+     * @param {int} width 
+     */
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.length = height*width;
+        this.werte = new Array(height*width);
+    }
+    /**
+     * Randomizes all values in range from -1 to 1
+     */
+    randomize() {
+        for(let i = 0;i < this.length;i++) {
+            this.werte[i] = Math.random()*2-1;
+        }
+    }
+
+    init() {
+        for(let i = 0;i < this.length;i++) {
+            this.werte[i] = 0;
+        }
+    }
+
+    /**
+     * 
+     * @param {int} x 
+     * @param {int} y 
+     * @returns {int} Wert
+     */
+    at(x, y) {
+        return this.werte[x+y*this.width];
+    }
+
+    /**
+     * 
+     * @param {int} x 
+     * @param {int} y 
+     * @param {double} wert
+     */
+     set(x, y, wert) {
+        this.werte[x+y*this.width] = wert;
+    }
+
+    dreh() {
+        let erg = new Matrix(this.height, this.width);
+        for(let y = 0;y < this.height;y++) {
+            for(let x = 0;x < this.width;x++) {
+                erg.set(this.height-1-y,x, this.at(x,y));
+            }
+        }
+        return erg;
+    }
+
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Punktprodukt 
+     */
+    dot(m) {
+        if(m.heigth !== this.heigth || m.width !== this.width) {
+            throw "Invalid multiplication scale";
+        }
+        let erg = new Matrix(this.width,this.height);
+        for(let i = 0;i < this.length;i++) {
+            erg.werte[i] = this.werte[i] * m.werte[i];
+        }
+
+        return erg;
+    }
+
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Summe
+     */
+    add(m) {
+        if(m.heigth !== this.heigth || m.width !== this.width) {
+            throw "Invalid addition scale";
+        }
+        let erg = new Matrix(this.width,this.height);
+        for(let i = 0;i < this.length;i++) {
+            erg.werte[i] = this.werte[i] + m.werte[i];
+        }
+
+        return erg;
+    }
+
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Differenz
+     */
+    sub(m) {
+        if(m.heigth !== this.heigth || m.width !== this.width) {
+            throw "Invalid subtraction scale";
+        }
+        let erg = new Matrix(this.width,this.height);
+        for(let i = 0;i < this.length;i++) {
+            erg.werte[i] = this.werte[i] - m.werte[i];
+        }
+
+        return erg;
+    }
+    
+    /**
+     * 
+     * @param {Matrix} m
+     * @return {Matrix} Produkt
+     */
+    mult(m) {
+        if(typeof m === "number") {
+            let erg = new Matrix(this.width,this.height);
+            for(let i = 0;i < this.length;i++) {
+                erg.werte[i] = this.werte[i] * m;
+            }
+            return erg;
+        }else if(this.width !== m.height) {
+            throw "Invalid multiplication scale";
+        }
+        
+        let erg = new Matrix(m.width,this.height);
+        for(let y = 0;y < this.height;y++) {
+            for(let x = 0;x < m.width;x++) {
+                erg.set(x,y,0);
+                for(let i = 0;i < this.width;i++) {
+                    erg.set(x,y,erg.at(x,y) + this.at(i,y) * m.at(x,i));
+                }
+            }
+        }
+        return erg;
+    }
+
+    /**
+     * 
+     * @returns Nested array
+     */
+    nest() {
+        let erg = [];
+        for(let y = 0;y < this.height;y++) {
+            erg.push([]);
+            for(let x = 0;x < this.width;x++) {
+                erg[y].push(this.at(x,y));
+            }
+        }
+        return erg;
+    }
+
+}
+
+
+    </script>
+    <title>Neuronales Netzwerk</title>
+</head>
+<body>
+    <canvas style="width: 500px; height: 500px; bottom: 50px; position: absolute; border: 2px solid black; background-color: white" id="canvas"></canvas>
+    <canvas style="width: 1000px; height: 500px; bottom: 50px; left:600px; position: absolute; border: 2px solid black; background-color: white" id="vis"></canvas>
+
+    <button onclick="toggleTraining()" id="trainBtn">start Training</button>
+    <script>
+
+        const canvasId = "canvas";
+        let canvas = document.getElementById(canvasId);
+        canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+        canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+        let ctx = canvas.getContext("2d");
+
+        /*
+            layers[n] = number of neurons in Layer n
+        */
+        let Netzwerk = function(layers) {
+
+            this.sättigung = 0.1;
+            this.lernRate = 0.3;
+
+            this.inputCount = layers[0];
+            this.outputCount = layers[layers.length-1];
+            this.layerCount = layers.length;
+            this.layers = layers;
+
+            this.weights = [];
+            this.biases = [];
+
+            for(let i = 0;i < this.layerCount-1;i++) {
+                this.weights.push(new Matrix( this.layers[i+1], this.layers[i] ));
+                this.weights[i].randomize();
+                this.biases.push(new Matrix( this.layers[i+1], 1 ));
+                this.biases[i].randomize();
+            }
+
+            this.sigmoid = function(n) {
+                return 1 / (1 + Math.exp(-n));
+            }
+
+            this.act = function(m) {
+                let erg = new Matrix(m.width, m.height);
+                erg.werte = m.werte.map( x => this.sigmoid(x));
+                return erg;
+            }
+
+            this.actA = function(m) {
+                let erg = new Matrix(m.width, m.height);
+                erg.werte = m.werte.map( x => this.sigmoid(x) * (1-this.sigmoid(x)) + this.sättigung);
+                return erg;
+            }
+
+            //Evaluates output Matrix for given input Matrix
+            this.predict = function(input) {
+                let erg = input;
+                for(let i = 0;i < this.layerCount-1;i++) {
+                    erg = erg.mult(this.weights[i]);
+                    erg = erg.add(this.biases[i]);
+                    erg = this.act(erg);
+                }
+                return erg;
+            }
+            
+            //trains network for 1 input Matrix and target Matrix
+            this.train = function(input, target) {
+                let net = [];
+                let out = [];
+
+                net[0] = input.mult(this.weights[0]).add(this.biases[0]);
+                out[0] = this.act(net[0]);
+
+                for(let i = 1;i < this.layerCount-1;i++) {
+                    net.push(out[i-1].mult(this.weights[i]).add(this.biases[i]));
+                    out.push(this.act(net[i]));
+                }
+
+                let output = out[out.length-1];
+
+                /*Fehlerberechnung*/
+                let Etotal = 0;
+
+                for(let i = 0;i < output.werte.length;i++) {
+                    let wert = output.werte[i];
+                    let ziel = target.werte[i];
+                    Etotal += (ziel - wert)*(ziel - wert);
+                }
+
+                Etotal = Etotal / 2;
+                /**********/
+                /*
+                    Deltaberechnung (d.h. der schwere Part)
+                */
+                let oDeltas = [];
+                let wDeltas = [];
+
+                let deltaO = out[out.length-1].sub(target).dot(this.actA(net[net.length-1]));
+                let deltaW = out[out.length-2].dreh().mult( deltaO ).mult(this.lernRate);
+
+                oDeltas.unshift(deltaO);
+                wDeltas.unshift(deltaW);
+
+                for(let i = 0;i < this.weights.length-2;i++) {
+                    let evIndex = net.length-1-2-i;
+
+                    //nullte 0 delta da das letzte geshifted wurde
+                    let weightedDelta = oDeltas[0].mult( this.weights[this.weights.length-1-i].dreh() );
+
+                    deltaO = this.actA(net[evIndex+1]).dot( weightedDelta );  //????????
+                    deltaW = out[evIndex].dreh().mult( deltaO ).mult(this.lernRate);
+
+                    oDeltas.unshift(deltaO);
+                    wDeltas.unshift(deltaW);
+                }
+
+                let w = this.weights[1].dreh();
+
+                //nullte 0 delta da das letzte geshifted wurde
+                deltaO = this.actA(net[0]).dot( oDeltas[0].mult(w)); //??????
+                deltaW = input.dreh().mult(deltaO).mult(this.lernRate);
+
+                oDeltas.unshift(deltaO);
+                wDeltas.unshift(deltaW);
+                /*
+                    Anpassen der Gewichte 
+                */
+                
+                for(let i = 0;i < this.weights.length;i++) {
+                    this.weights[i] = this.weights[i].sub(wDeltas[i]);
+                    this.biases[i] = this.biases[i].sub(oDeltas[i].mult(this.lernRate));
+                }
+
+                return Etotal;
+                
+            }
+            
+            this.trainSet = function(inputArray, targetArray, rounds = 1000, minError = 0.001) {
+                let rIndex = 0;
+                let error = 0;
+
+                if(inputArray[0].length !== this.weights[0].height) {
+                    throw `Input (${inputArray[0].length}) to Network (${this.weights[i].height}) missmatch`;
+                }
+
+                if(targetArray[0].length !== this.weights[this.weights.length-1].width) {
+                    throw `Network (${this.weights[this.weights.length-1].width}) to Target (${targetArray[0].length}) missmatch`;
+                }
+
+                let inputMatrix = new Matrix(inputArray[0].length, 1);
+                let targetMatrix = new Matrix(targetArray[0].length, 1);
+
+                while(rIndex < rounds) {
+                    for(let i = 0;i < inputArray.length;i++) {
+                        inputMatrix.werte = inputArray[i];
+                        targetMatrix.werte = targetArray[i];
+                        error += this.train(inputMatrix, targetMatrix);
+                    }
+                    if(error < minError) {
+                        return error;
+                    }
+                    error = 0;
+                    rIndex++;
+                }
+
+                return error;
+            }
+        }
+
+        let inps = [];
+        let outs = [];
+
+        for(let i = 0;i < 30;i++) {
+            let x = Math.random()-0.5;
+            let y = Math.random()-0.5;
+            let erg = Math.random();
+            inps.push([x,y]);
+            outs.push([erg]);
+        }
+
+        let mapTargets = function(inputArray, outputArray) {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext("2d");
+
+            let sclF = 255/500;
+
+            for(i = 0;i < inputArray.length;i++) {
+                let x = (inputArray[i][0]+0.5)*500;
+                let y = (inputArray[i][1]+0.5)*500;
+                ctx.beginPath();
+                ctx.strokeStyle = outputArray[i][0] > 0.5 ? "#FF6666" : "#6666FF";
+                ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.stroke();
+            }
+        }
+
+        mapTargets(inps, outs);
+
+        let schichten = [2,10,10,1];
+
+        let nn = new Netzwerk(schichten);
+
+        let testMatrix = new Matrix(schichten[0], 1);
+        testMatrix.randomize();
+
+
+        let mapNetwork = function(network) {
+            let canvas = document.getElementById("canvas");
+        
+            canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+            canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+
+            let ctx = canvas.getContext("2d");
+
+            let matrix = new Matrix(network.inputCount, 1);
+
+            for(let x = 0;x < canvas.width;x += 2) {
+                for(let y = 0;y < canvas.height;y += 2) {
+                    let g = 0;
+                    matrix.werte = [(x/500)-0.5,(y/500)-0.5];
+                    let erg = network.predict(matrix).werte[0];
+                    
+                    let r = erg > 0.5 ? Math.min(erg*100,255) : 0;
+                    let b = erg <= 0.5 ? Math.min(erg*100, 255) : 0;
+                    
+                    /*let r = erg > 0 ? 100 : 0;
+                    let b = erg <= 0 ? 100 : 0;*/
+
+                    let a = 255;
+                    ctx.fillStyle = "rgba("+r+","+g+","+b+","+(a/255)+")";
+                    ctx.fillRect(x,y,2,2);
+                }
+            }
+        }
+
+        let toggle = false;
+        function toggleTraining() {
+            let nb = document.getElementById("trainBtn");
+            if(!toggle) {
+                int = setInterval(()=>{
+                    let err = nn.trainSet(inps, outs, 100);
+                    mapNetwork(nn);
+                    mapTargets(inps, outs);
+                }, 2);
+                nb.innerHTML = "... stop";
+                toggle = !toggle;
+            }else {
+                clearInterval(int);
+                nb.innerHTML = "start Training";
+                toggle = !toggle;
+            }
+            
+        }
+    </script>   
+</body>
+</html>
