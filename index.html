@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neuronales Netzwerk</title>
+</head>
+<body>
+    <canvas style="width: 500px; height: 500px; bottom: 20px; position: absolute; border: 2px solid black; background-color: white" id="canvas"></canvas>
+    <!--canvas style="width: 1000px; height: 500px; bottom: 20px; left:600px; position: absolute; border: 2px solid black; background-color: white" id="vis"></canvas><!-->
+    <canvas style="width: 1000px; height: 400px; top: 20px; left:600px; position: absolute; border: 2px solid black; background-color: white" id="errorPlot"></canvas>
+
+    <button onclick="toggleTraining()" id="trainBtn">train 1 round</button>
+    <button onclick="predict()" id="trainBtn">Predict</button>
+    <button onclick="scale()">Predict Own</button>
+    <button onclick="window.clear()">clear</button>
+    <p id="err">Error: </p>
+    <p id="prid">Prediction: </p>
+    <p id="pown">Prediction of drawing: </p>
+
+        <canvas style="width: 500px; height: 500px; bottom: 20px; left:600px; position: absolute; border: 2px solid black; background-color: black" id="paint"></canvas>
+    
+    <script type="module">
+        
+        import { Matrix } from "./netzwerk/Matrix.js";
+        import { Netzwerk } from "./netzwerk/NeuronalesNetzwerk.js";
+        import { Visualisierer } from "./netzwerk/Vis.js";
+        import * as MNIST from "./netzwerk/src/mnist.js";
+        import { activations,loss } from "./netzwerk/functions.js";
+
+        let mnist = window.mnist;
+
+        let set = mnist.set(4000, 6000);
+
+        const canvasId = "canvas";
+        let canvas = document.getElementById(canvasId);
+        canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+        canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+        let ctx = canvas.getContext("2d");
+
+        let inps = [];
+        let outs = [];
+
+        for(let i = 0;i < set.training.length;i++) {
+            inps.push(set.training[i].input);
+            outs.push(set.training[i].output);
+        }
+
+        let schichten = [28*28,100,100,10];
+
+        let nn = new Netzwerk(schichten);
+
+        let vis = new Visualisierer(nn);
+        
+        let int;
+        let toggle = false;
+
+        let reluPair = [activations.lrelu, activations.lreluA];
+        let softPair = [activations.softmax,activations.softmaxA];
+        nn.setActivations([reluPair,reluPair,softPair]);
+        nn.setErrorFunction(loss.crossEntropy);
+        nn.setLoss(loss.crossEntropyA);
+
+        nn.lernRate = 0.3;
+
+        function predict() {
+            let prid = document.getElementById("prid");
+            let val09 = parseInt(Math.random()*9)
+            var digit = mnist[val09].get();
+            let canvas = document.getElementById('canvas');
+            canvas.setAttribute('width', window.getComputedStyle(canvas, null).getPropertyValue("width"));
+            canvas.setAttribute('height', window.getComputedStyle(canvas, null).getPropertyValue("height"));
+            var context = canvas.getContext('2d');
+            mnist.draw(digit, context); // draws a '1' mnist digit in the canvas
+            context.scale(canvas.width/28,canvas.height/28);
+            context.drawImage(canvas, 0, 0);
+            context.scale(1,1);
+            let matrix = new Matrix(1, nn.inputCount);
+            matrix.werte = digit;
+            let erg = nn.predict(matrix);
+            let num = 0;
+            for(let i = 0;i < erg.werte.length;i++) {
+                if(erg.werte[i] > erg.werte[num]) num = i;
+            }
+
+            prid.innerHTML = `Prediction: ${num}`;
+        }
+
+        window.predict = predict;
+
+
+        function train1set() {
+            
+            return new Promise(resolve => {
+                resolve(nn.trainSet(inps, outs, 100, true));
+            }); 
+            
+        }
+
+        async function toggleTraining() {
+            let nb = document.getElementById("trainBtn");
+            let errP = document.getElementById("err");
+            nb.innerHTML = "training...";
+            let err = await train1set();
+            vis.plotError("errorPlot", err);
+            errP.innerHTML = `Error: ${err}`;
+            nb.innerHTML = "train 1 set";
+        }
+
+        window.toggleTraining = toggleTraining;
+
+/*************************************************************/
+
+        (function() {
+            var canvas = document.querySelector('#paint');
+            var ctx = canvas.getContext('2d');
+
+            let c = document.createElement("canvas");
+            let cc = c.getContext("2d");
+           
+
+    window.scale = function() {
+        let canvas = document.querySelector('#paint');
+
+        cc.fillStyle = "black";
+        cc.fillRect(0,0,28,28);
+        cc.scale(28/canvas.width,28/canvas.height);
+        cc.drawImage(canvas, 0, 0);
+        cc.scale(canvas.width/28,canvas.height/28);
+
+        let imgData = cc.getImageData(0,0,28,28);
+        let data = [];
+        for(let i = 0;i < 28*28;i++) {
+            data.push(imgData.data[i*4]/255);
+        }
+        let prid = document.getElementById("pown");
+        let matrix = new Matrix(1, nn.inputCount);
+            matrix.werte = data;
+        let erg = nn.predict(matrix);
+        let num = 0;
+            for(let i = 0;i < erg.werte.length;i++) {
+                if(erg.werte[i] > erg.werte[num]) num = i;
+            }
+
+            prid.innerHTML = `Prediction of drawing: ${num}`;
+    }
+
+    window.clear = function() {
+        let canvas = document.querySelector('#paint');
+        let ctx = canvas.getContext("2d");
+        ctx.fillStyle = "black";
+        ctx.fillRect(0,0,canvas.width,canvas.height);
+    }
+    
+    
+
+    var sketch = canvas;
+    var sketch_style = getComputedStyle(sketch);
+    canvas.width = parseInt(sketch_style.getPropertyValue('width'));
+    canvas.height = parseInt(sketch_style.getPropertyValue('height'));
+
+    var mouse = {x: 0, y: 0};
+    var last_mouse = {x: 0, y: 0};
+
+    /* Mouse Capturing Work */
+    canvas.addEventListener('mousemove', function(e) {
+        last_mouse.x = mouse.x;
+        last_mouse.y = mouse.y;
+
+        mouse.x = e.pageX - this.offsetLeft;
+        mouse.y = e.pageY - this.offsetTop;
+    }, false);
+
+
+    /* Drawing on Paint App */
+    ctx.lineWidth = 50;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'white';
+
+    canvas.addEventListener('mousedown', function(e) {
+        canvas.addEventListener('mousemove', onPaint, false);
+    }, false);
+
+    canvas.addEventListener('mouseup', function() {
+        canvas.removeEventListener('mousemove', onPaint, false);
+    }, false);
+
+    var onPaint = function() {
+        ctx.beginPath();
+        ctx.moveTo(last_mouse.x, last_mouse.y);
+        ctx.lineTo(mouse.x, mouse.y);
+        ctx.closePath();
+        ctx.stroke();
+    };
+
+}());
+
+        
+    </script>   
+</body>
+</html>
